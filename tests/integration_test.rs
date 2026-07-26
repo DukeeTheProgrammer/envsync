@@ -55,7 +55,13 @@ impl TestRepo {
 
         // Create linked worktree
         Command::new("git")
-            .args(["worktree", "add", &linked_path.to_string_lossy(), "-b", "feature"])
+            .args([
+                "worktree",
+                "add",
+                &linked_path.to_string_lossy(),
+                "-b",
+                "feature",
+            ])
             .current_dir(&main)
             .assert()
             .success();

@@ -1,11 +1,7 @@
 use colored::*;
 
 pub fn print_error(err: &anyhow::Error) {
-    eprintln!(
-        "{} {}",
-        "error:".red().bold(),
-        err
-    );
+    eprintln!("{} {}", "error:".red().bold(), err);
 
     for cause in err.chain().skip(1) {
         eprintln!("  {} {}", "caused by:".dimmed(), cause);

@@ -86,16 +86,13 @@ pub fn list_worktrees(start_path: &Path) -> Result<Vec<WorktreeInfo>> {
             let path_str = line.strip_prefix("worktree ").unwrap_or("");
             current_path = Some(PathBuf::from(path_str));
             current_name = None;
-        } else if line.starts_with("head ") {
-            // skip
-        } else if line.starts_with("branch ") {
-            // skip
-        } else if line.starts_with("bare ") {
-            // skip
-        } else if line.starts_with("prunable ") {
-            // skip
-        } else if line.starts_with("locked ") {
-            // skip
+        } else if line.starts_with("head ")
+            || line.starts_with("branch ")
+            || line.starts_with("bare ")
+            || line.starts_with("prunable ")
+            || line.starts_with("locked ")
+        {
+            // skip metadata lines
         } else if !line.is_empty() {
             // This is the directory line (first line in porcelain output)
             if current_path.is_none() {
@@ -124,8 +121,8 @@ pub fn list_worktrees(start_path: &Path) -> Result<Vec<WorktreeInfo>> {
 }
 
 pub fn get_current_worktree_root(path: &Path) -> Result<PathBuf> {
-    let toplevel = git_cmd(&["rev-parse", "--show-toplevel"], path)
-        .context("Not inside a git repository.")?;
+    let toplevel =
+        git_cmd(&["rev-parse", "--show-toplevel"], path).context("Not inside a git repository.")?;
     Ok(PathBuf::from(toplevel.trim()))
 }
 

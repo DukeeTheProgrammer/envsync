@@ -59,17 +59,14 @@ impl Config {
         let content = fs::read_to_string(&config_path)
             .with_context(|| format!("Failed to read config: {}", config_path.display()))?;
 
-        let config: Config =
-            toml::from_str(&content).with_context(|| format!("Failed to parse config: {}", config_path.display()))?;
+        let config: Config = toml::from_str(&content)
+            .with_context(|| format!("Failed to parse config: {}", config_path.display()))?;
 
         Ok(config)
     }
 
     pub fn should_ignore(&self, file_path: &Path) -> bool {
-        let file_name = file_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let file_name = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         for pattern in &self.envsync.ignore {
             if *pattern == file_name || *pattern == file_path.to_string_lossy() {

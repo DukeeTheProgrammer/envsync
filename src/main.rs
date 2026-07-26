@@ -98,15 +98,11 @@ fn run(cli: Cli) -> Result<()> {
 
 fn cmd_status(verbose: bool) -> Result<()> {
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-    let worktrees = worktree::list_worktrees(&current_dir)
-        .context("Failed to list git worktrees")?;
+    let worktrees =
+        worktree::list_worktrees(&current_dir).context("Failed to list git worktrees")?;
 
     println!();
-    println!(
-        "{} {}",
-        "envsync".cyan().bold(),
-        "status".cyan()
-    );
+    println!("{} {}", "envsync".cyan().bold(), "status".cyan());
     println!("{}", "─".repeat(50).dimmed());
 
     let main_info = worktree::find_main_worktree(&current_dir)?;
@@ -128,7 +124,11 @@ fn cmd_status(verbose: bool) -> Result<()> {
     );
 
     for wt in &worktrees {
-        let marker = if wt.is_main { " (main)".dimmed().to_string() } else { String::new() };
+        let marker = if wt.is_main {
+            " (main)".dimmed().to_string()
+        } else {
+            String::new()
+        };
         println!(
             "{} {}{}",
             "Worktree:".cyan(),
@@ -187,7 +187,11 @@ fn cmd_sync(all: bool, dry_run: bool, use_source: bool, merge: bool) -> Result<(
     println!(
         "{} {}",
         "envsync".cyan().bold(),
-        if dry_run { "sync (dry run)".cyan() } else { "sync".cyan() }
+        if dry_run {
+            "sync (dry run)".cyan()
+        } else {
+            "sync".cyan()
+        }
     );
     println!("{}", "─".repeat(50).dimmed());
 
@@ -214,63 +218,40 @@ fn cmd_sync(all: bool, dry_run: bool, use_source: bool, merge: bool) -> Result<(
             let target = wt.path.join(relative);
 
             match sync::sync_files(env_file, &target, dry_run) {
-                Ok(result) => {
-                    match result.action {
-                        sync::SyncAction::Copied => {
-                            println!(
-                                "  {} {}",
-                                "copied".green(),
-                                relative.display()
-                            );
-                            sync_count += 1;
+                Ok(result) => match result.action {
+                    sync::SyncAction::Copied => {
+                        println!("  {} {}", "copied".green(), relative.display());
+                        sync_count += 1;
+                    }
+                    sync::SyncAction::Merged => {
+                        println!("  {} {}", "merged".green(), relative.display());
+                        if let Some(diff) = &result.diff_output {
+                            println!("{}", diff);
                         }
-                        sync::SyncAction::Merged => {
+                        sync_count += 1;
+                    }
+                    sync::SyncAction::Unchanged => {
+                        println!("  {} {}", "unchanged".dimmed(), relative.display());
+                    }
+                    sync::SyncAction::Conflict(diff) => {
+                        conflict_count += 1;
+                        if use_source || merge {
+                            let strategy = if use_source { "source" } else { "merge" };
+                            sync::apply_conflict_resolution(env_file, &target, strategy)?;
                             println!(
-                                "  {} {}",
-                                "merged".green(),
-                                relative.display()
+                                "  {} {} ({})",
+                                "resolved".green(),
+                                relative.display(),
+                                strategy
                             );
-                            if let Some(diff) = &result.diff_output {
-                                println!("{}", diff);
-                            }
-                            sync_count += 1;
-                        }
-                        sync::SyncAction::Unchanged => {
-                            println!(
-                                "  {} {}",
-                                "unchanged".dimmed(),
-                                relative.display()
-                            );
-                        }
-                        sync::SyncAction::Conflict(diff) => {
-                            conflict_count += 1;
-                            if use_source || merge {
-                                let strategy = if use_source { "source" } else { "merge" };
-                                sync::apply_conflict_resolution(env_file, &target, strategy)?;
-                                println!(
-                                    "  {} {} ({})",
-                                    "resolved".green(),
-                                    relative.display(),
-                                    strategy
-                                );
-                            } else {
-                                println!(
-                                    "  {} {}",
-                                    "conflict".red().bold(),
-                                    relative.display()
-                                );
-                                println!("{}", diff);
-                            }
+                        } else {
+                            println!("  {} {}", "conflict".red().bold(), relative.display());
+                            println!("{}", diff);
                         }
                     }
-                }
+                },
                 Err(e) => {
-                    println!(
-                        "  {} {}: {}",
-                        "error".red().bold(),
-                        relative.display(),
-                        e
-                    );
+                    println!("  {} {}: {}", "error".red().bold(), relative.display(), e);
                 }
             }
         }
@@ -327,11 +308,7 @@ fn cmd_diff(_main_only: bool) -> Result<()> {
     }
 
     println!();
-    println!(
-        "{} {}",
-        "envsync".cyan().bold(),
-        "diff".cyan()
-    );
+    println!("{} {}", "envsync".cyan().bold(), "diff".cyan());
     println!("{}", "─".repeat(50).dimmed());
     println!(
         "{} {}",
@@ -363,11 +340,7 @@ fn cmd_diff(_main_only: bool) -> Result<()> {
         let diffs = envfile::diff_env(&source_env, &target_env);
 
         if diffs.is_empty() {
-            println!(
-                "{} {} (in sync)",
-                relative.display(),
-                "OK".green()
-            );
+            println!("{} {} (in sync)", relative.display(), "OK".green());
         } else {
             println!(
                 "{} {} difference(s):",
@@ -409,13 +382,9 @@ ignore = []
 # DB_NAME = { base = "myapp_dev", suffix = "_wt{N}" }
 "#;
 
-    std::fs::write(&config_path, default_config)
-        .context("Failed to write config file")?;
+    std::fs::write(&config_path, default_config).context("Failed to write config file")?;
 
-    println!(
-        "{} Created .envsync.toml",
-        "success:".green().bold()
-    );
+    println!("{} Created .envsync.toml", "success:".green().bold());
 
     Ok(())
 }
@@ -455,10 +424,7 @@ fn cmd_install_hook(uninstall: bool) -> Result<()> {
             let content = std::fs::read_to_string(&hook_path)?;
             if content.contains("envsync") {
                 std::fs::remove_file(&hook_path)?;
-                println!(
-                    "{} Removed envsync hook",
-                    "success:".green().bold()
-                );
+                println!("{} Removed envsync hook", "success:".green().bold());
             } else {
                 println!(
                     "{} Hook exists but doesn't contain envsync. Not removing.",
@@ -466,10 +432,7 @@ fn cmd_install_hook(uninstall: bool) -> Result<()> {
                 );
             }
         } else {
-            println!(
-                "{} No post-checkout hook found.",
-                "info:".blue().bold()
-            );
+            println!("{} No post-checkout hook found.", "info:".blue().bold());
         }
         return Ok(());
     }
@@ -483,10 +446,7 @@ envsync sync 2>/dev/null || true
     if hook_path.exists() {
         let existing = std::fs::read_to_string(&hook_path)?;
         if existing.contains("envsync") {
-            println!(
-                "{} envsync hook already installed",
-                "info:".blue().bold()
-            );
+            println!("{} envsync hook already installed", "info:".blue().bold());
             return Ok(());
         }
 
@@ -509,10 +469,7 @@ envsync sync 2>/dev/null || true
         std::fs::set_permissions(&hook_path, perms)?;
     }
 
-    println!(
-        "{} Installed post-checkout hook",
-        "success:".green().bold()
-    );
+    println!("{} Installed post-checkout hook", "success:".green().bold());
     println!("  {} {}", "Hook:".dimmed(), hook_path.display());
 
     Ok(())

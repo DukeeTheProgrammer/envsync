@@ -30,11 +30,9 @@ pub fn find_env_files(project_root: &Path) -> Result<Vec<PathBuf>> {
     let glob_pattern = project_root.join(".env.*");
     if let Some(glob_str) = glob_pattern.to_str() {
         if let Ok(paths) = glob(glob_str) {
-            for entry in paths {
-                if let Ok(path) = entry {
-                    if path.is_file() && !env_files.contains(&path) {
-                        env_files.push(path);
-                    }
+            for path in paths.flatten() {
+                if path.is_file() && !env_files.contains(&path) {
+                    env_files.push(path);
                 }
             }
         }
@@ -80,11 +78,7 @@ pub enum SyncAction {
     Conflict(String),
 }
 
-pub fn sync_files(
-    source: &Path,
-    target: &Path,
-    dry_run: bool,
-) -> Result<SyncResult> {
+pub fn sync_files(source: &Path, target: &Path, dry_run: bool) -> Result<SyncResult> {
     let env_file = EnvFile::parse(source)?;
     let target_exists = target.exists();
 
@@ -97,8 +91,13 @@ pub fn sync_files(
             });
         }
 
-        fs::copy(source, target)
-            .with_context(|| format!("Failed to copy {} to {}", source.display(), target.display()))?;
+        fs::copy(source, target).with_context(|| {
+            format!(
+                "Failed to copy {} to {}",
+                source.display(),
+                target.display()
+            )
+        })?;
         return Ok(SyncResult {
             file: target.to_path_buf(),
             action: SyncAction::Copied,
@@ -118,7 +117,9 @@ pub fn sync_files(
     }
 
     // Check if there are real conflicts (target has values different from source)
-    let has_conflicts = diffs.iter().any(|d| d.kind == crate::envfile::DiffKind::Changed);
+    let has_conflicts = diffs
+        .iter()
+        .any(|d| d.kind == crate::envfile::DiffKind::Changed);
 
     if has_conflicts {
         let diff_output = format_diff(&diffs);
@@ -192,15 +193,10 @@ pub fn format_diff(diffs: &[EnvDiff]) -> String {
     output
 }
 
-pub fn apply_conflict_resolution(
-    source: &Path,
-    target: &Path,
-    strategy: &str,
-) -> Result<()> {
+pub fn apply_conflict_resolution(source: &Path, target: &Path, strategy: &str) -> Result<()> {
     match strategy {
         "source" => {
-            fs::copy(source, target)
-                .context("Failed to overwrite target with source")?;
+            fs::copy(source, target).context("Failed to overwrite target with source")?;
         }
         "merge" => {
             let source_env = EnvFile::parse(source)?;

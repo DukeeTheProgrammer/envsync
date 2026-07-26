@@ -10,22 +10,30 @@ Git worktrees give you multiple working directories, but `.env` files are gitign
 
 ## Installation
 
+**macOS / Linux:**
+
 ```bash
-# One-liner (macOS / Linux)
 curl -sSL https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.sh | bash
 ```
 
-This downloads the pre-built binary for your platform and installs it to `/usr/local/bin` (or `~/.local/bin` if no sudo). If no pre-built binary is available, it builds from source automatically (requires [Rust](https://rustup.rs)).
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.ps1 | iex
+```
+
+Both scripts download the pre-built binary for your platform and install it to your PATH. If no pre-built binary is available, they build from source automatically (requires [Rust](https://rustup.rs)).
 
 **Other methods:**
 
 ```bash
-# cargo install
+# cargo install (any platform)
 cargo install envsync
 
 # Clone and run install script
 git clone https://github.com/DukeeTheProgrammer/envsync.git
-cd envsync && ./install.sh
+cd envsync && ./install.sh      # macOS/Linux
+# .\install.ps1                 # Windows
 ```
 
 ## Quick Start

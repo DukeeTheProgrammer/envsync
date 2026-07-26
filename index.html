@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>envsync — Sync .env files across git worktrees</title>
+  <meta name="description" content="Never lose your environment configuration when switching branches. envsync automatically syncs .env files across all git worktrees.">
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #141416;
+      --border: #232326;
+      --text: #ededef;
+      --text-dim: #8a8a8e;
+      --accent: #3b82f6;
+      --accent-glow: #3b82f620;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --cyan: #06b6d4;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* --- NAV --- */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0a0a0bcc;
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      z-index: 100;
+    }
+    .logo {
+      font-size: 1.3rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      color: var(--accent);
+    }
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+    .nav-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    /* --- HERO --- */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      position: relative;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.35rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-bottom: 2rem;
+    }
+    .badge span { color: var(--green); }
+    h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 1.5rem;
+      max-width: 800px;
+    }
+    h1 .highlight {
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 1.2rem;
+      color: var(--text-dim);
+      max-width: 600px;
+      margin-bottom: 2.5rem;
+    }
+    .hero-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: #444; }
+
+    /* --- INSTALL --- */
+    .install-box {
+      margin-top: 3rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      max-width: 620px;
+      width: 100%;
+    }
+    .install-box code {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      flex: 1;
+      user-select: all;
+      color: var(--text-dim);
+    }
+    .install-box code span { color: var(--green); }
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      padding: 0.4rem 0.6rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* --- SECTIONS --- */
+    section {
+      padding: 6rem 2rem;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 0.75rem;
+    }
+    h2 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .section-desc {
+      color: var(--text-dim);
+      max-width: 600px;
+      margin-bottom: 3rem;
+    }
+
+    /* --- PROBLEM --- */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    .problem-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .problem-card.bad { border-color: #ef444430; }
+    .problem-card.good { border-color: #22c55e30; }
+    .problem-card .tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    .problem-card.bad .tag { background: #ef444420; color: var(--red); }
+    .problem-card.good .tag { background: #22c55e20; color: var(--green); }
+
+    /* --- TERMINAL --- */
+    .terminal {
+      background: #0d0d0f;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.7;
+    }
+    .terminal-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: #161618;
+      border-bottom: 1px solid var(--border);
+    }
+    .terminal-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .terminal-dot.r { background: #ef4444; }
+    .terminal-dot.y { background: #eab308; }
+    .terminal-dot.g { background: #22c55e; }
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+    .terminal-body {
+      padding: 1.2rem 1.5rem;
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .prompt { color: var(--cyan); }
+    .cmd { color: var(--text); }
+    .ok { color: var(--green); }
+    .warn { color: var(--yellow); }
+    .err { color: var(--red); }
+    .dim { color: var(--text-dim); }
+    .hl { color: var(--accent); }
+
+    /* --- FEATURES --- */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feature-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .feature-card p { color: var(--text-dim); font-size: 0.9rem; }
+
+    /* --- DEMO --- */
+    .demo-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    /* --- PLATFORMS --- */
+    .platforms {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .platform {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem 1.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 600;
+      transition: border-color 0.2s;
+    }
+    .platform:hover { border-color: var(--accent); }
+    .platform-icon { font-size: 1.4rem; }
+
+    /* --- FOOTER --- */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 2rem;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+
+    /* --- RESPONSIVE --- */
+    @media (max-width: 768px) {
+      .problem-grid,
+      .demo-columns {
+        grid-template-columns: 1fr;
+      }
+      .nav-links { display: none; }
+      .install-box { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">envsync</div>
+    <ul class="nav-links">
+      <li><a href="#problem">Problem</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com/DukeeTheProgrammer/envsync" target="_blank">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="badge"><span>&#9679;</span> v0.1.0 &mdash; Now Available</div>
+    <h1>Never lose your <span class="highlight">.env</span> files again</h1>
+    <p class="subtitle">envsync automatically syncs your environment configuration across every git worktree. One command. Zero config.</p>
+
+    <div class="hero-buttons">
+      <a href="#install" class="btn btn-primary">Install Now</a>
+      <a href="https://github.com/DukeeTheProgrammer/envsync" target="_blank" class="btn btn-secondary">View on GitHub</a>
+    </div>
+
+    <div class="install-box">
+      <code><span>$</span> curl -sSL https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.sh | bash</code>
+      <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section id="problem">
+    <div class="section-label">The Problem</div>
+    <h2>Git worktrees are great. Until they aren't.</h2>
+    <p class="section-desc">Worktrees give you isolated code branches, but your <code>.env</code> files are gitignored. Every new worktree starts blind.</p>
+
+    <div class="problem-grid">
+      <div class="problem-card bad">
+        <div class="tag">Without envsync</div>
+        <div class="terminal">
+          <div class="terminal-body">
+<span class="dim">$</span> git worktree add ../feature-login -b login
+<span class="dim">$</span> cd ../feature-login && npm run dev
+
+<span class="err">Error: DATABASE_URL is not defined</span>
+<span class="err">Error: Missing PORT in environment</span>
+<span class="err">Where is my .env? Gone.</span>
+
+<span class="dim">$</span> cp ../main/.env .          <span class="dim"># manual copy... every time</span>
+<span class="dim">$</span> cp ../main/.env.local .    <span class="dim"># forget this one? good luck</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="problem-card good">
+        <div class="tag">With envsync</div>
+        <div class="terminal">
+          <div class="terminal-body">
+<span class="dim">$</span> git worktree add ../feature-login -b login
+<span class="dim">$</span> cd ../feature-login && <span class="hl">envsync sync</span>
+
+<span class="ok">copied .env</span>
+<span class="ok">copied .env.local</span>
+<span class="ok">Synced 2 file(s).</span>
+
+<span class="dim">$</span> npm run dev
+<span class="ok">Server running on port 3000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section>
+    <div class="section-label">How It Works</div>
+    <h2>Three commands. That's it.</h2>
+    <p class="section-desc">envsync detects your main worktree, finds all <code>.env</code> files, and keeps them in sync.</p>
+
+    <div class="demo-columns">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot r"></div>
+          <div class="terminal-dot y"></div>
+          <div class="terminal-dot g"></div>
+          <div class="terminal-title">Check Status</div>
+        </div>
+        <div class="terminal-body">
+<span class="dim">$</span> <span class="hl">envsync status</span>
+
+<span class="hl">envsync status</span>
+<span class="dim">&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;</span>
+
+<span class="ok">Found 2 .env file(s) in main worktree</span>
+
+<span class="dim">Worktree:</span> ~/my-project <span class="dim">(main)</span>
+<span class="dim">Worktree:</span> ~/my-project--feature
+  .env       <span class="ok">in sync</span>
+  .env.local <span class="ok">in sync</span>
+        </div>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot r"></div>
+          <div class="terminal-dot y"></div>
+          <div class="terminal-dot g"></div>
+          <div class="terminal-title">Sync & Diff</div>
+        </div>
+        <div class="terminal-body">
+<span class="dim">$</span> <span class="hl">envsync diff</span>
+
+<span class="hl">envsync diff</span>
+<span class="dim">&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;</span>
+
+.env <span class="warn">2 difference(s):</span>
+<span class="ok">+</span> NEW_API_KEY=abc123
+<span class="warn">~</span> PORT=3000 -> 3001
+
+<span class="dim">$</span> <span class="hl">envsync sync --merge</span>
+<span class="ok">resolved .env (merge)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="section-label">Features</div>
+    <h2>Everything you need. Nothing you don't.</h2>
+    <p class="section-desc">envsync does one thing and does it well. Unix philosophy for the modern developer.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #3b82f620; color: var(--accent);">&#9889;</div>
+        <h3>Zero Config</h3>
+        <p>Works out of the box. Just run <code>envsync sync</code> and your <code>.env</code> files are synced.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #22c55e20; color: var(--green);">&#10003;</div>
+        <h3>Conflict Detection</h3>
+        <p>When files diverge, envsync shows you exactly what changed and lets you merge or overwrite.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #06b6d420; color: var(--cyan);">&#8644;</div>
+        <h3>Bidirectional Sync</h3>
+        <p>Sync from main to linked, or detect changes in both directions. You stay in control.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #eab30820; color: var(--yellow);">&#128640;</div>
+        <h3>Dry Run Mode</h3>
+        <p>Preview exactly what would change before writing any files. <code>--dry-run</code> keeps you safe.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #ef444420; color: var(--red);">&#128274;</div>
+        <h3>Auto-Sync on Checkout</h3>
+        <p>Install the git hook and every branch switch automatically syncs your <code>.env</code> files.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #a855f720; color: #a855f7;">&#9881;</div>
+        <h3>Monorepo Support</h3>
+        <p>Detects <code>.env</code> files in <code>apps/</code>, <code>packages/</code>, and <code>libs/</code> directories.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI AGENTS -->
+  <section>
+    <div class="section-label">AI Workflows</div>
+    <h2>Built for the age of AI agents</h2>
+    <p class="section-desc">Running multiple AI coding agents in parallel? Each one needs its own environment to avoid port collisions and database conflicts.</p>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="terminal-dot r"></div>
+        <div class="terminal-dot y"></div>
+        <div class="terminal-dot g"></div>
+        <div class="terminal-title">Multi-Agent Setup</div>
+      </div>
+      <div class="terminal-body">
+<span class="dim"># Create worktrees for each AI agent</span>
+<span class="dim">$</span> git worktree add ../agent-feature -b agent-feature
+<span class="dim">$</span> git worktree add ../agent-bugfix -b agent-bugfix
+
+<span class="dim"># Sync env to each</span>
+<span class="dim">$</span> cd ../agent-feature && <span class="hl">envsync sync</span>
+<span class="ok">copied .env</span>
+
+<span class="dim">$</span> cd ../agent-bugfix && <span class="hl">envsync sync</span>
+<span class="ok">copied .env</span>
+
+<span class="dim"># Each agent gets unique ports via .envsync.toml overrides</span>
+<span class="dim"># Agent 1: PORT=3001, Agent 2: PORT=3002</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install">
+    <div class="section-label">Get Started</div>
+    <h2>Install in one command</h2>
+    <p class="section-desc">Works on macOS, Linux, and Windows. Pre-built binaries or build from source.</p>
+
+    <div class="platforms">
+      <div class="platform">
+        <span class="platform-icon">&#128421;</span>
+        <div>
+          <div>macOS / Linux</div>
+          <code style="font-size: 0.8rem; color: var(--text-dim);">curl ... | bash</code>
+        </div>
+      </div>
+      <div class="platform">
+        <span class="platform-icon">&#128187;</span>
+        <div>
+          <div>Windows</div>
+          <code style="font-size: 0.8rem; color: var(--text-dim);">irm ... | iex</code>
+        </div>
+      </div>
+      <div class="platform">
+        <span class="platform-icon">&#128230;</span>
+        <div>
+          <div>Pre-built Binaries</div>
+          <code style="font-size: 0.8rem; color: var(--text-dim);">GitHub Releases</code>
+        </div>
+      </div>
+      <div class="platform">
+        <span class="platform-icon">&#128295;</span>
+        <div>
+          <div>From Source</div>
+          <code style="font-size: 0.8rem; color: var(--text-dim);">cargo install envsync</code>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 2.5rem;">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="terminal-dot r"></div>
+          <div class="terminal-dot y"></div>
+          <div class="terminal-dot g"></div>
+          <div class="terminal-title">macOS / Linux</div>
+        </div>
+        <div class="terminal-body">
+<span class="dim"># One-liner install</span>
+<span class="dim">$</span> <span class="hl">curl -sSL https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.sh | bash</span>
+
+<span class="ok">>>> Installed envsync to /usr/local/bin/envsync</span>
+<span class="ok">>>> Run 'envsync --help' to get started</span>
+        </div>
+      </div>
+
+      <div class="terminal" style="margin-top: 1rem;">
+        <div class="terminal-bar">
+          <div class="terminal-dot r"></div>
+          <div class="terminal-dot y"></div>
+          <div class="terminal-dot g"></div>
+          <div class="terminal-title">Windows (PowerShell)</div>
+        </div>
+        <div class="terminal-body">
+<span class="dim"># One-liner install</span>
+<span class="dim">PS&gt;</span> <span class="hl">irm https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.ps1 | iex</span>
+
+<span class="ok">>>> Installed envsync to C:\Users\you\.local\bin\envsync.exe</span>
+<span class="ok">>>> Run 'envsync --help' to get started</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <p style="margin-bottom: 0.5rem;">
+      <strong style="font-family: var(--mono); color: var(--accent);">envsync</strong> &mdash; MIT License
+    </p>
+    <p>
+      <a href="https://github.com/DukeeTheProgrammer/envsync" target="_blank">GitHub</a> &middot;
+      <a href="https://github.com/DukeeTheProgrammer/envsync/releases" target="_blank">Releases</a> &middot;
+      <a href="https://github.com/DukeeTheProgrammer/envsync/issues" target="_blank">Issues</a>
+    </p>
+  </footer>
+
+  <script>
+    function copyInstall(btn) {
+      const cmd = 'curl -sSL https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.sh | bash';
+      navigator.clipboard.writeText(cmd).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+      });
+    }
+
+    // Smooth scroll
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        document.querySelector(a.getAttribute('href')).scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+</html>

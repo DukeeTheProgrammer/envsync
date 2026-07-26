@@ -11,14 +11,21 @@ Git worktrees give you multiple working directories, but `.env` files are gitign
 ## Installation
 
 ```bash
-# macOS / Linux (Homebrew)
-brew install dukeetheprogrammer/tap/envsync
+# One-liner (macOS / Linux)
+curl -sSL https://raw.githubusercontent.com/DukeeTheProgrammer/envsync/main/install.sh | bash
+```
 
-# Any platform (cargo install)
+This downloads the pre-built binary for your platform and installs it to `/usr/local/bin` (or `~/.local/bin` if no sudo). If no pre-built binary is available, it builds from source automatically (requires [Rust](https://rustup.rs)).
+
+**Other methods:**
+
+```bash
+# cargo install
 cargo install envsync
 
-# Pre-built binaries
-# Download from https://github.com/dukeetheprogrammer/envsync/releases
+# Clone and run install script
+git clone https://github.com/DukeeTheProgrammer/envsync.git
+cd envsync && ./install.sh
 ```
 
 ## Quick Start

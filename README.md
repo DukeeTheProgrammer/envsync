@@ -2,6 +2,8 @@
 
 Sync `.env` files across git worktrees. Never lose your environment configuration when switching branches.
 
+**[Website](https://dukeetheprogrammer.github.io/envsync/)** · [Releases](https://github.com/DukeeTheProgrammer/envsync/releases)
+
 ## The Problem
 
 Git worktrees give you multiple working directories, but `.env` files are gitignored. Every new worktree starts with no environment configuration. You end up manually copying `.env` files, forgetting variables, and debugging "why isn't my app connecting to the database?"

@@ -29,6 +29,10 @@ enum Commands {
         /// Show detailed info
         #[arg(short, long)]
         verbose: bool,
+
+        /// Search in current directory instead of main worktree
+        #[arg(short, long)]
+        local: bool,
     },
 
     /// Sync .env files from main worktree to linked worktrees
@@ -48,6 +52,10 @@ enum Commands {
         /// On conflict, merge both versions
         #[arg(long)]
         merge: bool,
+
+        /// Search in current directory instead of main worktree
+        #[arg(short, long)]
+        local: bool,
     },
 
     /// Show differences between main and current worktree .env files
@@ -55,6 +63,10 @@ enum Commands {
         /// Show the main version
         #[arg(long)]
         main: bool,
+
+        /// Search in current directory instead of main worktree
+        #[arg(short, long)]
+        local: bool,
     },
 
     /// Initialize envsync config in current project
@@ -83,20 +95,21 @@ fn main() {
 
 fn run(cli: Cli) -> Result<()> {
     match cli.command {
-        Commands::Status { verbose } => cmd_status(verbose),
+        Commands::Status { verbose, local } => cmd_status(verbose, local),
         Commands::Sync {
             all,
             dry_run,
             use_source,
             merge,
-        } => cmd_sync(all, dry_run, use_source, merge),
-        Commands::Diff { main } => cmd_diff(main),
+            local,
+        } => cmd_sync(all, dry_run, use_source, merge, local),
+        Commands::Diff { main, local } => cmd_diff(main, local),
         Commands::Init { force } => cmd_init(force),
         Commands::InstallHook { uninstall } => cmd_install_hook(uninstall),
     }
 }
 
-fn cmd_status(verbose: bool) -> Result<()> {
+fn cmd_status(verbose: bool, local: bool) -> Result<()> {
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
     let worktrees =
         worktree::list_worktrees(&current_dir).context("Failed to list git worktrees")?;
@@ -105,22 +118,38 @@ fn cmd_status(verbose: bool) -> Result<()> {
     println!("{} {}", "envsync".cyan().bold(), "status".cyan());
     println!("{}", "─".repeat(50).dimmed());
 
-    let main_info = worktree::find_main_worktree(&current_dir)?;
-    let env_files = sync::find_env_files(&main_info.path)?;
+    // Resolve search path
+    let search_path = if local {
+        current_dir.clone()
+    } else {
+        worktree::find_main_worktree(&current_dir)?.path
+    };
+
+    let env_files = sync::find_env_files(&search_path)?;
 
     if env_files.is_empty() {
+        let scope = if local { "current directory" } else { "main worktree" };
         println!(
-            "{} No .env files found in main worktree: {}",
+            "{} No .env files found in {}.",
             "warning:".yellow().bold(),
-            main_info.path.display()
+            scope
         );
+        if !local {
+            println!(
+                "  {} Try {} to search in the current directory.",
+                "tip:".dimmed(),
+                "envsync status --local".cyan()
+            );
+        }
         return Ok(());
     }
 
+    let scope_label = if local { "current directory" } else { "main worktree" };
     println!(
-        "{} {} .env file(s) in main worktree\n",
+        "{} {} .env file(s) in {}\n",
         "Found".green().bold(),
-        env_files.len()
+        env_files.len(),
+        scope_label
     );
 
     for wt in &worktrees {
@@ -138,7 +167,7 @@ fn cmd_status(verbose: bool) -> Result<()> {
 
         if verbose && !wt.is_main {
             for env_file in &env_files {
-                let relative = env_file.strip_prefix(&main_info.path).unwrap_or(env_file);
+            let relative = env_file.strip_prefix(&search_path).unwrap_or(env_file);
                 let target = wt.path.join(relative);
 
                 if target.exists() {
@@ -167,17 +196,34 @@ fn cmd_status(verbose: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_sync(all: bool, dry_run: bool, use_source: bool, merge: bool) -> Result<()> {
+fn cmd_sync(all: bool, dry_run: bool, use_source: bool, merge: bool, local: bool) -> Result<()> {
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-    let main_info =
-        worktree::find_main_worktree(&current_dir).context("Failed to find main worktree")?;
-    let env_files = sync::find_env_files(&main_info.path)?;
+
+    // Resolve search path
+    let search_path = if local {
+        current_dir.clone()
+    } else {
+        worktree::find_main_worktree(&current_dir)
+            .context("Failed to find main worktree")?
+            .path
+    };
+
+    let env_files = sync::find_env_files(&search_path)?;
 
     if env_files.is_empty() {
+        let scope = if local { "current directory" } else { "main worktree" };
         println!(
-            "{} No .env files found in main worktree.",
-            "warning:".yellow().bold()
+            "{} No .env files found in {}.",
+            "warning:".yellow().bold(),
+            scope
         );
+        if !local {
+            println!(
+                "  {} Try {} to search in the current directory.",
+                "tip:".dimmed(),
+                "envsync sync --local".cyan()
+            );
+        }
         return Ok(());
     }
 
@@ -203,7 +249,7 @@ fn cmd_sync(all: bool, dry_run: bool, use_source: bool, merge: bool) -> Result<(
             continue;
         }
 
-        if !all && wt.path != current_dir && !is_ancestor(&main_info.path, &wt.path) {
+        if !all && wt.path != current_dir && !is_ancestor(&search_path, &wt.path) {
             continue;
         }
 
@@ -214,7 +260,7 @@ fn cmd_sync(all: bool, dry_run: bool, use_source: bool, merge: bool) -> Result<(
         );
 
         for env_file in &env_files {
-            let relative = env_file.strip_prefix(&main_info.path).unwrap_or(env_file);
+        let relative = env_file.strip_prefix(&search_path).unwrap_or(env_file);
             let target = wt.path.join(relative);
 
             match sync::sync_files(env_file, &target, dry_run) {
@@ -284,46 +330,70 @@ fn is_ancestor(_parent: &Path, _child: &Path) -> bool {
     true // Default to syncing all worktrees for now
 }
 
-fn cmd_diff(_main_only: bool) -> Result<()> {
+fn cmd_diff(_main_only: bool, local: bool) -> Result<()> {
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-    let main_info = worktree::find_main_worktree(&current_dir)?;
+
+    // Resolve search path
+    let search_path = if local {
+        current_dir.clone()
+    } else {
+        worktree::find_main_worktree(&current_dir)?.path
+    };
+
     let current_root = worktree::get_current_worktree_root(&current_dir)?;
 
-    if main_info.path == current_root {
+    if !local && search_path == current_root {
         println!(
             "{} You are in the main worktree. Nothing to diff.",
             "info:".blue().bold()
         );
-        return Ok(());
-    }
-
-    let env_files = sync::find_env_files(&main_info.path)?;
-
-    if env_files.is_empty() {
         println!(
-            "{} No .env files found in main worktree.",
-            "warning:".yellow().bold()
+            "  {} Try {} to diff files in the current directory.",
+            "tip:".dimmed(),
+            "envsync diff --local".cyan()
         );
         return Ok(());
     }
+
+    let env_files = sync::find_env_files(&search_path)?;
+
+    if env_files.is_empty() {
+        let scope = if local { "current directory" } else { "main worktree" };
+        println!(
+            "{} No .env files found in {}.",
+            "warning:".yellow().bold(),
+            scope
+        );
+        if !local {
+            println!(
+                "  {} Try {} to search in the current directory.",
+                "tip:".dimmed(),
+                "envsync diff --local".cyan()
+            );
+        }
+        return Ok(());
+    }
+
+    let scope_label = if local { "current directory" } else { "main worktree" };
 
     println!();
     println!("{} {}", "envsync".cyan().bold(), "diff".cyan());
     println!("{}", "─".repeat(50).dimmed());
     println!(
         "{} {}",
-        "Main:".dimmed(),
-        main_info.path.display().to_string().white()
+        "Source:".dimmed(),
+        search_path.display().to_string().white()
     );
     println!(
-        "{} {}",
-        "Current:".dimmed(),
-        current_root.display().to_string().white()
+        "{} {} ({})",
+        "Target:".dimmed(),
+        current_root.display().to_string().white(),
+        scope_label
     );
     println!();
 
     for env_file in &env_files {
-        let relative = env_file.strip_prefix(&main_info.path).unwrap_or(env_file);
+        let relative = env_file.strip_prefix(&search_path).unwrap_or(env_file);
         let target = current_root.join(relative);
 
         if !target.exists() {
